@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "modernc.org/sqlite" // 纯 Go 实现的 SQLite 驱动，无需 CGO
 )
@@ -24,8 +25,11 @@ func Init(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 
-	// SQLite 单连接写更稳，避免锁冲突。
-	db.SetMaxOpenConns(1)
+	// WAL 模式下读不阻塞写；写已由 dispatcher 串行消费，这里放开读连接池，
+	// 避免列表查询与回写状态互相阻塞。busy_timeout + repo 层重试兜底锁冲突。
+	db.SetMaxOpenConns(8)
+	db.SetMaxIdleConns(4)
+	db.SetConnMaxIdleTime(5 * time.Minute)
 
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("ping sqlite: %w", err)

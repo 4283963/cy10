@@ -36,8 +36,13 @@ func main() {
 		log.Printf("✅ Telegram 已配置，目标 chat_id=%s", cfg.Telegram.ChatID)
 	}
 
+	// 异步通知调度器：把慢速 Telegram 调用从请求路径剥离，防止回调涌入时协程成批挂起、SQLite 写锁雪崩。
+	dispatcher := services.NewDispatcher(cfg.Dispatcher.QueueSize, cfg.Dispatcher.Workers)
+	dispatcher.Start()
+	defer dispatcher.Shutdown(time.Duration(cfg.Dispatcher.ShutdownTimeout) * time.Second)
+
 	orderRepo := database.NewOrderRepo(db)
-	orderHandler := handlers.NewOrderHandler(orderRepo, telegramSvc, cfg)
+	orderHandler := handlers.NewOrderHandler(orderRepo, telegramSvc, dispatcher, cfg)
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -52,10 +57,11 @@ func main() {
 	// 健康检查
 	r.GET("/api/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"code":     200,
-			"status":   "ok",
-			"telegram": telegramSvc.Configured(),
-			"time":     time.Now().Format(time.RFC3339),
+			"code":       200,
+			"status":     "ok",
+			"telegram":   telegramSvc.Configured(),
+			"dispatcher": dispatcher.Stats(),
+			"time":       time.Now().Format(time.RFC3339),
 		})
 	})
 
@@ -86,10 +92,11 @@ func main() {
 	<-quit
 	log.Println("收到退出信号，正在关闭服务...")
 
+	// 先停止接收新的 HTTP 请求，再让 dispatcher 排空剩余通知任务，最后关库。
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("强制关闭: %v", err)
+		log.Printf("HTTP 强制关闭: %v", err)
 	}
 	log.Println("服务已退出")
 }

@@ -26,3 +26,10 @@ shipping:
   download_link: "https://pan.baidu.com/s/xxxxxxxx"
   # 网盘提取码
   extraction_code: "abcd"
+
+# 异步通知调度器（worker 池）：把慢速 Telegram 调用从回调请求路径剥离，
+# 防止瞬时涌入的回调把协程成批挂起、进而拖垮 SQLite 写锁。
+dispatcher:
+  queue_size: 1000        # 任务缓冲队列容量，需足够大以吸收突发流量；满时回调将背压等待
+  workers: 2             # 并发 worker 数；Telegram 侧有速率限制，一般 1~4
+  shutdown_timeout: 10   # 优雅关闭时等待剩余任务处理完的最长秒数

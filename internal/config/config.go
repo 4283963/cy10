@@ -12,10 +12,11 @@ import (
 
 // Config 是整个中转系统的运行时配置。
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
-	Database DatabaseConfig `yaml:"database"`
-	Telegram TelegramConfig `yaml:"telegram"`
-	Shipping ShippingConfig `yaml:"shipping"`
+	Server     ServerConfig     `yaml:"server"`
+	Database   DatabaseConfig   `yaml:"database"`
+	Telegram   TelegramConfig   `yaml:"telegram"`
+	Shipping   ShippingConfig   `yaml:"shipping"`
+	Dispatcher DispatcherConfig `yaml:"dispatcher"`
 }
 
 // ServerConfig 描述 HTTP 服务相关参数。
@@ -42,13 +43,23 @@ type ShippingConfig struct {
 	ScriptName     string `yaml:"script_name"` // 脚本名称，用于通知文案
 }
 
+// DispatcherConfig 描述异步通知任务调度器（worker 池）参数。
+// 这是抗并发雪崩的核心：Telegram 慢调用由固定数量 worker 串行消费，
+// 不占用 HTTP 请求协程，也不会让 SQLite 写事务长期挂起。
+type DispatcherConfig struct {
+	QueueSize       int `yaml:"queue_size"`       // 任务缓冲队列容量，需足够大以吸收突发流量
+	Workers         int `yaml:"workers"`          // 并发 worker 数，Telegram 侧有速率限制，一般 1~4
+	ShutdownTimeout int `yaml:"shutdown_timeout"` // 优雅关闭时等待剩余任务的最长秒数
+}
+
 // Load 从指定路径加载配置文件。若文件不存在则使用默认值。
 // 敏感字段支持通过环境变量覆盖，环境变量优先级高于配置文件。
 func Load(path string) (*Config, error) {
 	cfg := &Config{
-		Server:   ServerConfig{Port: "8080"},
-		Database: DatabaseConfig{Path: "./data/orders.db"},
-		Shipping: ShippingConfig{ScriptName: "自动化脚本工具"},
+		Server:     ServerConfig{Port: "8080"},
+		Database:   DatabaseConfig{Path: "./data/orders.db"},
+		Shipping:   ShippingConfig{ScriptName: "自动化脚本工具"},
+		Dispatcher: DispatcherConfig{QueueSize: 1000, Workers: 2, ShutdownTimeout: 10},
 	}
 
 	if data, err := os.ReadFile(path); err == nil {
@@ -65,6 +76,15 @@ func Load(path string) (*Config, error) {
 	}
 	if strings.TrimSpace(cfg.Database.Path) == "" {
 		cfg.Database.Path = "./data/orders.db"
+	}
+	if cfg.Dispatcher.QueueSize <= 0 {
+		cfg.Dispatcher.QueueSize = 1000
+	}
+	if cfg.Dispatcher.Workers <= 0 {
+		cfg.Dispatcher.Workers = 2
+	}
+	if cfg.Dispatcher.ShutdownTimeout <= 0 {
+		cfg.Dispatcher.ShutdownTimeout = 10
 	}
 
 	applyEnvOverrides(cfg)
