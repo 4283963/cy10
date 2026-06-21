@@ -29,7 +29,13 @@ shipping:
 
 # 异步通知调度器（worker 池）：把慢速 Telegram 调用从回调请求路径剥离，
 # 防止瞬时涌入的回调把协程成批挂起、进而拖垮 SQLite 写锁。
+#
+# 错峰排队：当 1 分钟内突然来了 ≥ burst_warn_threshold_per_min 条订单（默认 10 条，
+# 即你说的"十几条"），系统会自动把发货动作排成队列，每隔 min_send_interval 秒才发一个，
+# 既能规避 Telegram 限流，也显得更自然。设 min_send_interval=0 可关闭错峰。
 dispatcher:
-  queue_size: 1000        # 任务缓冲队列容量，需足够大以吸收突发流量；满时回调将背压等待
-  workers: 2             # 并发 worker 数；Telegram 侧有速率限制，一般 1~4
-  shutdown_timeout: 10   # 优雅关闭时等待剩余任务处理完的最长秒数
+  queue_size: 1000                     # 任务缓冲队列容量，需足够大以吸收突发流量；满时回调将背压等待
+  workers: 2                           # 并发 worker 数；注意：无论 workers 多少，全局都会按 min_send_interval 串行错峰
+  shutdown_timeout: 10                 # 优雅关闭时等待剩余任务处理完的最长秒数
+  min_send_interval: 5                 # 两次发货之间的最小间隔秒数（错峰核心）；设 0 则不限速
+  burst_warn_threshold_per_min: 10     # 每分钟入队任务数超过该值时打预警日志；设 0 不预警

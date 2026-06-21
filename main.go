@@ -37,7 +37,13 @@ func main() {
 	}
 
 	// 异步通知调度器：把慢速 Telegram 调用从请求路径剥离，防止回调涌入时协程成批挂起、SQLite 写锁雪崩。
-	dispatcher := services.NewDispatcher(cfg.Dispatcher.QueueSize, cfg.Dispatcher.Workers)
+	// 同时支持错峰限速：每分钟来了十几单时，每隔 min_send_interval 秒才发一个。
+	dispatcher := services.NewDispatcher(
+		cfg.Dispatcher.QueueSize,
+		cfg.Dispatcher.Workers,
+		cfg.Dispatcher.MinSendInterval,
+		cfg.Dispatcher.BurstWarnThresholdPerMin,
+	)
 	dispatcher.Start()
 	defer dispatcher.Shutdown(time.Duration(cfg.Dispatcher.ShutdownTimeout) * time.Second)
 

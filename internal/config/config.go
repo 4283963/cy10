@@ -46,10 +46,13 @@ type ShippingConfig struct {
 // DispatcherConfig 描述异步通知任务调度器（worker 池）参数。
 // 这是抗并发雪崩的核心：Telegram 慢调用由固定数量 worker 串行消费，
 // 不占用 HTTP 请求协程，也不会让 SQLite 写事务长期挂起。
+// 同时支持全局错峰限速：每分钟来了十几单时，自动每隔 min_send_interval 秒发一个。
 type DispatcherConfig struct {
-	QueueSize       int `yaml:"queue_size"`       // 任务缓冲队列容量，需足够大以吸收突发流量
-	Workers         int `yaml:"workers"`          // 并发 worker 数，Telegram 侧有速率限制，一般 1~4
-	ShutdownTimeout int `yaml:"shutdown_timeout"` // 优雅关闭时等待剩余任务的最长秒数
+	QueueSize                int `yaml:"queue_size"`                   // 任务缓冲队列容量，需足够大以吸收突发流量
+	Workers                  int `yaml:"workers"`                      // 并发 worker 数，Telegram 侧有速率限制，一般 1~4
+	ShutdownTimeout          int `yaml:"shutdown_timeout"`             // 优雅关闭时等待剩余任务的最长秒数
+	MinSendInterval          int `yaml:"min_send_interval"`            // 两次发货之间的最小间隔秒数（错峰核心）；设 0 则不限速
+	BurstWarnThresholdPerMin int `yaml:"burst_warn_threshold_per_min"` // 每分钟入队任务数超过该值时打预警日志；设 0 则不预警
 }
 
 // Load 从指定路径加载配置文件。若文件不存在则使用默认值。
@@ -59,7 +62,7 @@ func Load(path string) (*Config, error) {
 		Server:     ServerConfig{Port: "8080"},
 		Database:   DatabaseConfig{Path: "./data/orders.db"},
 		Shipping:   ShippingConfig{ScriptName: "自动化脚本工具"},
-		Dispatcher: DispatcherConfig{QueueSize: 1000, Workers: 2, ShutdownTimeout: 10},
+		Dispatcher: DispatcherConfig{QueueSize: 1000, Workers: 2, ShutdownTimeout: 10, MinSendInterval: 5, BurstWarnThresholdPerMin: 10},
 	}
 
 	if data, err := os.ReadFile(path); err == nil {
@@ -85,6 +88,12 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Dispatcher.ShutdownTimeout <= 0 {
 		cfg.Dispatcher.ShutdownTimeout = 10
+	}
+	if cfg.Dispatcher.MinSendInterval < 0 {
+		cfg.Dispatcher.MinSendInterval = 0
+	}
+	if cfg.Dispatcher.BurstWarnThresholdPerMin < 0 {
+		cfg.Dispatcher.BurstWarnThresholdPerMin = 0
 	}
 
 	applyEnvOverrides(cfg)
@@ -121,6 +130,16 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("RELAY_SCRIPT_NAME"); v != "" {
 		cfg.Shipping.ScriptName = v
+	}
+	if v := os.Getenv("RELAY_MIN_SEND_INTERVAL"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Dispatcher.MinSendInterval = n
+		}
+	}
+	if v := os.Getenv("RELAY_BURST_WARN"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Dispatcher.BurstWarnThresholdPerMin = n
+		}
 	}
 }
 
