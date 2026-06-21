@@ -1,0 +1,113 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Config 是整个中转系统的运行时配置。
+type Config struct {
+	Server   ServerConfig   `yaml:"server"`
+	Database DatabaseConfig `yaml:"database"`
+	Telegram TelegramConfig `yaml:"telegram"`
+	Shipping ShippingConfig `yaml:"shipping"`
+}
+
+// ServerConfig 描述 HTTP 服务相关参数。
+type ServerConfig struct {
+	Port         string `yaml:"port"`
+	CaptureToken string `yaml:"capture_token"` // 可选：闲鱼助手请求时携带的鉴权令牌
+}
+
+// DatabaseConfig 描述 SQLite 数据库文件路径。
+type DatabaseConfig struct {
+	Path string `yaml:"path"`
+}
+
+// TelegramConfig 描述 Telegram 机器人相关参数。
+type TelegramConfig struct {
+	BotToken string `yaml:"bot_token"` // 机器人 token
+	ChatID   string `yaml:"chat_id"`   // 目标频道/群组/用户，如 @your_channel
+}
+
+// ShippingConfig 描述发货内容（下载链接与提取码）。
+type ShippingConfig struct {
+	DownloadLink   string `yaml:"download_link"`
+	ExtractionCode string `yaml:"extraction_code"`
+	ScriptName     string `yaml:"script_name"` // 脚本名称，用于通知文案
+}
+
+// Load 从指定路径加载配置文件。若文件不存在则使用默认值。
+// 敏感字段支持通过环境变量覆盖，环境变量优先级高于配置文件。
+func Load(path string) (*Config, error) {
+	cfg := &Config{
+		Server:   ServerConfig{Port: "8080"},
+		Database: DatabaseConfig{Path: "./data/orders.db"},
+		Shipping: ShippingConfig{ScriptName: "自动化脚本工具"},
+	}
+
+	if data, err := os.ReadFile(path); err == nil {
+		if err := yaml.Unmarshal(data, cfg); err != nil {
+			return nil, fmt.Errorf("parse %s: %w", path, err)
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+
+	// 默认值兜底
+	if strings.TrimSpace(cfg.Server.Port) == "" {
+		cfg.Server.Port = "8080"
+	}
+	if strings.TrimSpace(cfg.Database.Path) == "" {
+		cfg.Database.Path = "./data/orders.db"
+	}
+
+	applyEnvOverrides(cfg)
+
+	if abs, err := filepath.Abs(cfg.Database.Path); err == nil {
+		cfg.Database.Path = abs
+	}
+
+	return cfg, nil
+}
+
+// applyEnvOverrides 用环境变量覆盖敏感/运行时配置，避免密钥落盘。
+func applyEnvOverrides(cfg *Config) {
+	if v := os.Getenv("RELAY_SERVER_PORT"); v != "" {
+		cfg.Server.Port = v
+	}
+	if v := os.Getenv("RELAY_CAPTURE_TOKEN"); v != "" {
+		cfg.Server.CaptureToken = v
+	}
+	if v := os.Getenv("RELAY_DB_PATH"); v != "" {
+		cfg.Database.Path = v
+	}
+	if v := os.Getenv("TELEGRAM_BOT_TOKEN"); v != "" {
+		cfg.Telegram.BotToken = v
+	}
+	if v := os.Getenv("TELEGRAM_CHAT_ID"); v != "" {
+		cfg.Telegram.ChatID = v
+	}
+	if v := os.Getenv("RELAY_DOWNLOAD_LINK"); v != "" {
+		cfg.Shipping.DownloadLink = v
+	}
+	if v := os.Getenv("RELAY_EXTRACTION_CODE"); v != "" {
+		cfg.Shipping.ExtractionCode = v
+	}
+	if v := os.Getenv("RELAY_SCRIPT_NAME"); v != "" {
+		cfg.Shipping.ScriptName = v
+	}
+}
+
+// AsInt 将字符串解析为 int，解析失败返回默认值。
+func AsInt(s string, def int) int {
+	if n, err := strconv.Atoi(s); err == nil {
+		return n
+	}
+	return def
+}

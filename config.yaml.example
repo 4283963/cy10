@@ -1,0 +1,28 @@
+# 闲鱼中转系统配置示例
+# 复制为 config.yaml 后填写真实值（config.yaml 已被 .gitignore 忽略）
+# 敏感字段也可用环境变量覆盖，环境变量优先级更高：
+#   TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID / RELAY_CAPTURE_TOKEN / RELAY_DOWNLOAD_LINK / RELAY_EXTRACTION_CODE
+
+server:
+  port: "8080"
+  # 可选：闲鱼助手回调时需在 Header(X-Capture-Token) 或 query(?token=) 携带该令牌
+  # 留空则不校验（仅建议内网/测试环境留空）
+  capture_token: ""
+
+database:
+  # SQLite 文件路径，目录不存在会自动创建
+  path: "./data/orders.db"
+
+telegram:
+  # 通过 @BotFather 创建机器人获取 token
+  bot_token: "123456:ABC-DEF_your_bot_token_here"
+  # 目标频道/群组/用户，频道示例：@your_channel_username；私密群组用数字 ID（如 -1001234567890）
+  chat_id: "@your_channel_username"
+
+shipping:
+  # 脚本名称，用于通知文案展示
+  script_name: "我的自动化脚本工具"
+  # 买家收到的下载链接
+  download_link: "https://pan.baidu.com/s/xxxxxxxx"
+  # 网盘提取码
+  extraction_code: "abcd"

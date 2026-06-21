@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>发货历史 · 闲鱼中转系统</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="topbar">
+            <div class="title">
+                <h1>📦 发货历史</h1>
+                <span class="subtitle">闲鱼自动化脚本中转系统</span>
+            </div>
+            <div class="actions">
+                <span id="total-info" class="muted">共 0 条</span>
+                <label class="auto-refresh">
+                    <input type="checkbox" id="auto-refresh" checked>
+                    <span>自动刷新</span>
+                </label>
+                <button id="refresh-btn" class="btn btn-primary">刷新</button>
+            </div>
+        </header>
+
+        <div id="status-bar" class="status-bar hidden"></div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="col-id">#</th>
+                        <th>买家邮箱</th>
+                        <th>订单号</th>
+                        <th>下载链接</th>
+                        <th>提取码</th>
+                        <th>状态</th>
+                        <th>创建时间</th>
+                        <th>通知时间</th>
+                    </tr>
+                </thead>
+                <tbody id="orders-body">
+                    <tr><td colspan="8" class="empty">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <footer class="footer">
+            <span>捕获接口：<code>POST /api/order/capture</code></span>
+            <span>列表接口：<code>GET /api/orders</code></span>
+        </footer>
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -33,3 +33,17 @@ bin/
 obj/
 __pycache__/
 *.pyc
+
+# Go 项目
+# 编译产物
+/xianyu-relay
+*.exe
+*.exe~
+# 含密钥的真实配置文件，仅保留 .example 模板
+config.yaml
+# SQLite 数据库与运行时数据
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
